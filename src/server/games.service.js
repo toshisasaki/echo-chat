@@ -118,13 +118,14 @@ module.exports = class Games {
             }
 
             multi.set(gameID, JSON.stringify(game), redis.print);
-            let replies = multi.exec();
-            if (replies) {
-                console.log('Game create transaction ok');
-                return game;
-            } else {
-                throw 'Create game transaction conflict';
-            }
+            multi.exec((replies) => {
+                if (replies) {
+                    console.log('Game create transaction ok');
+                    return game;
+                } else {
+                    throw 'Create game transaction conflict';
+                }
+            });
         }
 
         return runWithRetries(op, cb, errCB);
@@ -191,13 +192,14 @@ module.exports = class Games {
                 game = undefined;
             }
 
-            let replies = multi.exec();
-            if (replies) {
-                console.log('Game remove player transaction ok')
-                return game;
-            } else {
-                throw 'Remove player transaction conflict';
-            }
+            multi.exec((replies) => {
+                if (replies) {
+                    console.log('Game remove player transaction ok')
+                    return game;
+                } else {
+                    throw 'Remove player transaction conflict';
+                }
+            });
         }
 
         return runWithRetries(op, cb, errCB);
@@ -236,13 +238,14 @@ module.exports = class Games {
                 // Create transaction
                 let multi = redisIO.multi();
                 multi.set(game.id, JSON.stringify(game), redis.print);
-                let replies = multi.exec();
-                if (replies) {
-                    console.log('Vote persona transaction ok');
-                    return game;
-                } else {
-                    throw 'Vote persona transaction conflict';
-                }
+                multi.exec((replies) => {
+                    if (replies) {
+                        console.log('Vote persona transaction ok');
+                        return game;
+                    } else {
+                        throw 'Vote persona transaction conflict';
+                    }
+                });
             }
         }
         return runWithRetries(op, cb, errCB);
@@ -349,13 +352,14 @@ module.exports = class Games {
 
             let multi = redisIO.multi();
             multi.set(game.id, JSON.stringify(game), redis.print);
-            let replies = multi.exec();
-            if (replies) {
-                console.log('New round transaction ok');
-                return game;
-            } else {
-                throw 'Next round transaction conflict';
-            }
+            multi.exec((replies) => {
+                if (replies) {
+                    console.log('New round transaction ok');
+                    return game;
+                } else {
+                    throw 'Next round transaction conflict';
+                }
+            });
         }
 
         return runWithRetries(op, cb, errCB);
@@ -397,13 +401,14 @@ module.exports = class Games {
                 let multi = redisIO.multi();
                 multi.set(game.id, JSON.stringify(game), redis.print);
 
-                let replies = multi.exec();
-                if (replies) {
-                    console.log('Answer transaction ok');
-                    return game;
-                } else {
-                    throw 'Answer transaction conflict';
-                }
+                multi.exec((replies) => {
+                    if (replies) {
+                        console.log('Answer transaction ok');
+                        return game;
+                    } else {
+                        throw 'Answer transaction conflict';
+                    }
+                });
             } else {
                 return game;
             }
@@ -445,14 +450,15 @@ module.exports = class Games {
                 // Create transaction
                 let multi = redisIO.multi();
                 multi.set(game.id, JSON.stringify(game), redis.print);
-                let replies = multi.exec();
-                console.log("replies = " + JSON.stringify(replies));
-                if (replies) {
-                    console.log('Vote answer transaction ok');
-                    return game;
-                } else {
-                    throw 'Vote answer transaction conflict';
-                }
+                multi.exec((replies) => {
+                    console.log("replies = " + JSON.stringify(replies));
+                    if (replies) {
+                        console.log('Vote answer transaction ok');
+                        return game;
+                    } else {
+                        throw 'Vote answer transaction conflict';
+                    }
+                });
             } else {
                 return game;
             }
@@ -493,13 +499,14 @@ module.exports = class Games {
             }
 
             multi.del(game.id, redis.print);
-            let replies = multi.exec();
-            if (replies) {
-                console.log('End game transaction ok');
-                return game;
-            } else {
-                throw 'End game transaction conflict';
-            }
+            multi.exec((replies) => {
+                if (replies) {
+                    console.log('End game transaction ok');
+                    return game;
+                } else {
+                    throw 'End game transaction conflict';
+                }
+            });
         }
 
         return runWithRetries(op, cb, errCB);
