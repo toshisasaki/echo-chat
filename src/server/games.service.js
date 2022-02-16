@@ -425,16 +425,17 @@ module.exports = class Games {
             let user = await Users.get(redisIO, userID);
             let game = await Games.get(redisIO, gameID);
 
-            if (user == undefined) {
+            if (user === undefined) {
                 throw `Invalid user ${userID}`;
             }
-            if (game == undefined) {
+            if (game === undefined) {
                 throw `Invalid game ${gameID}`;
             }
 
             let updated = false;
             game.players.find((p) => {
-                if (p.id == user.id) {
+                if (p.id === user.id) {
+                    debug(`Found user id ${user.id}`);
                     p.answerVote = chosen;
                     updated = true;
                 }
@@ -445,6 +446,7 @@ module.exports = class Games {
                 let multi = redisIO.multi();
                 multi.set(game.id, JSON.stringify(game), redis.print);
                 let replies = multi.exec();
+                console.log("replies = " + JSON.stringify(replies));
                 if (replies) {
                     console.log('Vote answer transaction ok');
                     return game;
