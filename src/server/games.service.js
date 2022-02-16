@@ -6,6 +6,7 @@ const Game = require('./game.class');
 const Redis = require('./redis.service');
 const Server = require('./server.service');
 const Users = require('./users.service');
+const Rooms = require('./rooms.service');
 
 const { runWithRetries } = require('./common');
 const debug = require('debug')('have_you_heard');
@@ -59,20 +60,10 @@ module.exports = class Games {
      * */
     static async create(redisIO, room, cb, errCB) {
 
-        if (!room || !room.ownerID || !room.users) {
-            if (errCB) {
-                errCB(new Error('Invalid room object'));
-            }
-            return undefined;
-        }
-
         async function op() {
+
             // Derive game ID from room ID
             let gameID = 'game_' + room.id.substring(5);
-            let toWatch = room.users.concat(gameID, room.id);
-
-            // Use transaction to avoid conflicts
-            await redisIO.watch(toWatch);
 
             let exist = await Redis.exists(redisIO, gameID);
             if (exist) {
@@ -104,7 +95,6 @@ module.exports = class Games {
 
             // Add only relevant information
             for (let u of users) {
-                await redisIO.watch(u.id);
                 game.players.push(
                     {
                         name: u.name,
@@ -118,12 +108,14 @@ module.exports = class Games {
             }
 
             multi.set(gameID, JSON.stringify(game), redis.print);
-            multi.exec((replies) => {
+            return Redis.multiExec(multi)
+            .then((replies) => {
+                console.log('replies: ' + JSON.stringify(replies));
                 if (replies) {
                     console.log('Game create transaction ok');
                     return game;
                 } else {
-                    throw 'Create game transaction conflict';
+                    throw new Error('Create game transaction conflict');
                 }
             });
         }
@@ -192,7 +184,8 @@ module.exports = class Games {
                 game = undefined;
             }
 
-            multi.exec((replies) => {
+            return Redis.multiExec(multi)
+            .then((replies) => {
                 if (replies) {
                     console.log('Game remove player transaction ok')
                     return game;
@@ -238,7 +231,8 @@ module.exports = class Games {
                 // Create transaction
                 let multi = redisIO.multi();
                 multi.set(game.id, JSON.stringify(game), redis.print);
-                multi.exec((replies) => {
+                return Redis.multiExec(multi)
+                .then((replies) => {
                     if (replies) {
                         console.log('Vote persona transaction ok');
                         return game;
@@ -352,7 +346,8 @@ module.exports = class Games {
 
             let multi = redisIO.multi();
             multi.set(game.id, JSON.stringify(game), redis.print);
-            multi.exec((replies) => {
+            return Redis.multiExec(multi)
+            .then((replies) => {
                 if (replies) {
                     console.log('New round transaction ok');
                     return game;
@@ -401,7 +396,8 @@ module.exports = class Games {
                 let multi = redisIO.multi();
                 multi.set(game.id, JSON.stringify(game), redis.print);
 
-                multi.exec((replies) => {
+                return Redis.multiExec(multi)
+                    .then((replies) => {
                     if (replies) {
                         console.log('Answer transaction ok');
                         return game;
@@ -450,7 +446,8 @@ module.exports = class Games {
                 // Create transaction
                 let multi = redisIO.multi();
                 multi.set(game.id, JSON.stringify(game), redis.print);
-                multi.exec((replies) => {
+                return Redis.multiExec(multi)
+                .then((replies) => {
                     console.log("replies = " + JSON.stringify(replies));
                     if (replies) {
                         console.log('Vote answer transaction ok');
@@ -499,7 +496,8 @@ module.exports = class Games {
             }
 
             multi.del(game.id, redis.print);
-            multi.exec((replies) => {
+            return Redis.multiExec(multi)
+            .then((replies) => {
                 if (replies) {
                     console.log('End game transaction ok');
                     return game;

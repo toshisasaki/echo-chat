@@ -50,22 +50,18 @@ module.exports = function(socket) {
                 return;
             }
 
-            try {
-                // Provide the callback to call when successful
-                await Games.create(redisIO, room, async (game) => {
-                    let io = Server.getIO();
+            // Provide the callback to call when successful
+            await Games.create(redisIO, room, async (game) => {
+                let io = Server.getIO();
 
-                    io.to(room.id).emit('game', JSON.stringify(game));
-                    console.log(`user ${user.id} started game on room ${room.id}`);
+                io.to(room.id).emit('game', JSON.stringify(game));
+                console.log(`user ${user.id} started game on room ${room.id}`);
 
-                    console.log(`game:\n` + JSON.stringify(game, null, 2));
-                }, (err) => {
-                    // Rollback
-                    console.error(`User ${userID} failed to start the game on room ${room.id}: ` + err);
-                });
-            } catch (err) {
-                console.log('Transaction for start failed after retries: ' + err);
-            }
+                console.log(`game:\n` + JSON.stringify(game, null, 2));
+            }, (err) => {
+                // Rollback
+                console.error(`User ${userID} failed to start the game on room ${room.id}: ` + err);
+            });
 
             // Unlock Redis IO connection
             Redis.returnIO(redisIO);
