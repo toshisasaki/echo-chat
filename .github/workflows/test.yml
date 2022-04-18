@@ -73,26 +73,32 @@ jobs:
         DEBUG=have_you_heard node src 2>/tmp/log/error.log >/tmp/log/server.log &
         sleep 2
 
+    - name: Run sanity random test
+      id: random
+      run: timeout 5m python3 test/auto_player.py -v -s http://localhost:3000 -r
+
+    - name: Upload random games
+      uses: actions/upload-artifact@v3
+      with:
+        name: games
+        path: random_game*.yml
+
     - name: Run tests
       id: tests
-      run: |
-        cd test
-        echo "Run sanity random game"
-        timeout 5m python3 auto_player.py -v -s http://localhost:3000 -r
-        echo "Run test games"
-        timeout 5m python3 auto_player.py -v -s http://localhost:3000 -t
-        cd ..
+      run: timeout 5m python3 test/auto_player.py -v -s http://localhost:3000 -t
 
-    - name: Debug Job Failure
+    - name: Debug Job failure
+      if: always() && (steps.server.outcome == 'failure' ||
+                       steps.random.outcome == 'failure'  ||
+                       steps.tests.outcome == 'failure')
       run: |
         echo "******** Server stderr ********"
         cat /tmp/log/error.log
         echo "******** Server stdout ********"
         cat /tmp/log/server.log
-      if: always() && (steps.server.outcome == 'failure' || steps.tests.outcome == 'failure')
 
-    - name: Upload log
+    - name: Upload logs
       uses: actions/upload-artifact@v3
       with:
         name: logs
-        path: /tmp/log/
+        path: /tmp/log/*.log
