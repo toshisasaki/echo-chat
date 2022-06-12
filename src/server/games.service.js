@@ -206,6 +206,109 @@ module.exports = class Games {
     }
 
     /**
+     * Checks if every voted on an answer and decides who won the round
+     * */
+    static decideRoundWinner(game) {
+        let sumVotes = {};
+        let allVoted = true;
+        // Check if all the players voted
+        for (let p of game.players) {
+            if (p.answerVote) {
+                // Only count valid votes
+                if (p.answerVote == "No voted answer") {
+                    continue;
+                }
+                if (p.answerVote in sumVotes) {
+                    sumVotes[p.answerVote]++;
+                } else {
+                    sumVotes[p.answerVote] = 1;
+                }
+            } else {
+                allVoted = false;
+                break;
+            }
+        }
+
+        let winner = undefined;
+        if (allVoted) {
+            let keys = Object.keys(sumVotes);
+
+            debug(`All voted, find winner`);
+            // Check winner answer
+            for (let k of keys) {
+                if (!winner) {
+                    winner = k;
+                } else {
+                    if (sumVotes[k] > sumVotes[winner]) {
+                        winner = k;
+                    } else if (sumVotes[k] === sumVotes[winner]) {
+
+                        let winner_time = undefined;
+                        let player_time = undefined;
+                        // Break the tie according to time
+                        for (let p of game.players) {
+                            if (p.id == k) {
+                                player_time = p.answer['time'];
+                            }
+                            if (p.id == winner) {
+                                winner_time = p.answer['time'];
+                            }
+                        }
+
+                        if (winner_time == undefined ||
+                            player_time == undefined)
+                        {
+                            console.log(`DEBUG THIS: Times not registered`);
+                        }
+                        else if (player_time < winner_time) {
+                            winner = k;
+                        }
+                    }
+                }
+            }
+            // No one voted, so there is no obvious winner
+            // Let's find out who provided the fastest answer
+            if (winner == undefined) {
+                let fastest_player = undefined;
+                for (let p of game.players) {
+                    if (fastest_player == undefined) {
+                        fastest_player = p;
+                    }
+                    if (p.answer['time'] < fastest_player.answer['time']) {
+                        fastest_player = p;
+                    }
+                }
+                winner = fastest_player.id
+            }
+
+            console.log(`Round winner for game ${game.id}: ${winner}`);
+            debug(`Round ${game.currentRound} of ${game.numRounds}`);
+        }
+        return winner;
+
+    }
+
+    static async announceRoundWinner(redisIO, game, room, winner) {
+        let io = Server.getIO();
+        io.to(room).emit('round winner', winner);
+
+        await Games.nextRound(redisIO, game.id, winner, async (startedGame) => {
+            if (startedGame.currentRound > startedGame.numRounds) {
+                // Finish game
+                if (!startedGame.match) {
+                    throw new Error(`Game ${startedGame.id} ended without winner`);
+                }
+
+                io.to(room).emit('game winner', JSON.stringify(startedGame.match));
+            } else {
+                debug(`Game round initialized for game ${startedGame.id}`);
+            }
+        }, (err) => {
+            console.error(`Failed to initialize new round for game ${game.id}: ` + err);
+        });
+    }
+
+    /**
      * Register the vote for a persona
      * */
     static async votePersona(redisIO, userID, gameID, persona, cb, errCB) {
@@ -250,6 +353,64 @@ module.exports = class Games {
             }
         }
         return runWithRetries(op, cb, errCB);
+    }
+
+    /**
+     * Checks is everyone voted on a persona and decides the persona for the game
+     * */
+    static decidePersona(game) {
+        let histogram = {};
+        let allVoted = true;
+        // Check if all the players voted
+        for (let p of game.players) {
+            if (p.personaVote) {
+                if (p.personaVote in histogram) {
+                    histogram[p.personaVote]++;
+                } else {
+                    histogram[p.personaVote] = 1;
+                }
+            } else {
+                allVoted = false;
+                break;
+            }
+        }
+
+        let winner = undefined;
+        if (allVoted) {
+            let keys = Object.keys(histogram);
+            // Check winner persona
+            for (let k of keys) {
+                debug(k);
+                if (!winner) {
+                    winner = k;
+                } else {
+                    if (histogram[k] > histogram[winner]) {
+                        winner = k;
+                    }
+                }
+            }
+            if (winner === 'Aleatório') {
+                let random = getRandomInt(0, 8);
+                console.log(`Random int ${random}`);
+                winner = pt_personas[random];
+            }
+
+            console.log(`Persona defined for game ${game.id}: ${winner}`);
+            debug(`game:\n` + JSON.stringify(game, null, 2));
+        }
+        return winner;
+    }
+
+    static async announcePersona(redisIO, game, room, winner) {
+        let io = Server.getIO();
+        io.to(room).emit('persona', winner);
+
+        await Games.nextRound(redisIO, game.id, undefined, (startedGame) => {
+            debug(`Game round initialized for game ${startedGame.id}`);
+            debug(`game:\n` + JSON.stringify(startedGame, null, 2));
+        }, (err) => {
+            console.err(`Failed to initialize new round for game ${startedGame.id}: ` + err);
+        });
     }
 
     /**
@@ -336,7 +497,7 @@ module.exports = class Games {
                     }
                 });
 
-                if (game.roundWinners.length >= game.numRounds) {
+                if (game.currentRound >= game.numRounds) {
                     game.match = Games.decideWinner(game);
                     console.log(`The game (${game.id}) winner was ${game.match.winner}`);
                 }
@@ -415,6 +576,28 @@ module.exports = class Games {
         }
 
         return runWithRetries(op, cb, errCB);
+    }
+
+    static decideAllAnswered(game) {
+        let allAnswered = true;
+        let answers = {};
+        // Check if all the players answered
+        for (let p of game.players) {
+            if (p.answer) {
+                answers[p.id] = p.answer['answer'];
+            } else {
+                allAnswered = false;
+                break;
+            }
+        }
+        return [allAnswered, answers];
+    }
+
+    static announceAnswers(game, room, answers) {
+        console.log(`All answers gathered for game ${game.id}`);
+        debug(`game:\n` + JSON.stringify(Game, null, 2));
+        let io = Server.getIO();
+        io.to(room).emit('round answers', JSON.stringify(answers));
     }
 
     /**

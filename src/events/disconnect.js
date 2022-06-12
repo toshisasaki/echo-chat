@@ -16,20 +16,37 @@ module.exports = function(socket) {
         await Redis.getIO(async (redisIO) => {
             let user = await Users.get(redisIO, userID);
             if (user) {
-                if (user.game) {
+                let gameID = user.game;
+                if (gameID) {
 
                     //TODO Update game state
 
-                    await Games.removePlayer(redisIO, userID, user.game, async (game) => {
+                    await Games.removePlayer(redisIO, userID, gameID, async (game) => {
                         let io = Server.getIO();
                         // If the user was in the game
                         if (game) {
                             debug(`game:\n` + JSON.stringify(game, null, 2));
                             console.log(`user ${user.id} left the game ${game.id}`);
+                            io.to(user.room).emit('game', JSON.stringify(game));
                         }
                     }, (err) => {
-                        console.error(`Could not remove user ${userID} from game ${user.game}: ` + err);
+                        console.error(`Could not remove user ${userID} from game ${gameID}: ` + err);
                     });
+
+                    let game = await Games.get(redisIO, gameID);
+
+                    let winner = Games.decideRoundWinner(game);
+                    let decision = Games.decideAllAnswered(game);
+                    let persona = Games.decidePersona(game);
+                    if (winner) {
+                        Games.announceRoundWinner(redisIO, game, user.room, winner);
+                    } else if (decision[0]) {
+                        Games.announceAnswers(game, user.room, decision[1]);
+                    } else if (persona) {
+                        Games.announcePersona(redisIO, game, user.room, persona);
+                    } else {
+                        console.log(`Game (${game.id}): Waiting for other players to vote`);
+                    }
                 }
 
                 if (user.room) {
